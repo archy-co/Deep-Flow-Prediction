@@ -7,7 +7,6 @@ from DfpNet import TurbNetG
 import utils as utils
 
 outputDir = "./AF_images"
-expo = 5
 
 def main(path: str):
     dataset = TurbDataset(None, mode=TurbDataset.TEST, dataDir=path, dataDirTest=path)
@@ -26,6 +25,9 @@ def main(path: str):
 
         targets_cpu = targets_cpu.cpu().numpy()[0]
         inputs_cpu = inputs_cpu.cpu().numpy()[0]
+
+        # print shape
+        print(f"Shape of input: {inputs_cpu.shape}")
 
         utils.saveAsImage(f"{os.path.join(outputDir, str(i))}_input.png", inputs_cpu[0])
         utils.saveAsImage(f"{os.path.join(outputDir, str(i))}_target.png", targets_cpu[0])

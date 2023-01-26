@@ -11,8 +11,10 @@ modelFn = "./modelG"
 outputDir = "./prediction"
 expo = 5
 
+inputsOnly = True
+
 def main(path: str):
-    dataset = TurbDataset(None, mode=TurbDataset.TEST, dataDir=path, dataDirTest=path)
+    dataset = TurbDataset(None, mode=TurbDataset.TEST, dataDir=path, dataDirTest=path, inputsOnly=inputsOnly)
     testLoader = DataLoader(dataset, batch_size=1, shuffle=False)
     
     if os.path.exists(outputDir):
@@ -33,21 +35,24 @@ def main(path: str):
     for i, data in enumerate(testLoader, 0):
         inputs_cpu, targets_cpu = data
         inputs_cpu = inputs_cpu.float().cuda()
-        targets_cpu = targets_cpu.float().cuda()
+        if not inputsOnly:
+            targets_cpu = targets_cpu.float().cuda()
         inputs.data.resize_as_(inputs_cpu).copy_(inputs_cpu)
 
         outputs = netG(inputs)
         outputs_cpu = outputs.data.cpu().numpy()[0]
-        targets_cpu = targets_cpu.cpu().numpy()[0]
+        if not inputsOnly:
+            targets_cpu = targets_cpu.cpu().numpy()[0]
         inputs_cpu = inputs_cpu.cpu().numpy()[0]
 
-        utils.imageOut(f"{os.path.join(outputDir, str(i))}", outputs_cpu, targets_cpu, normalize=False, saveMontage=True)
+        if not inputsOnly:
+            utils.imageOut(f"{os.path.join(outputDir, str(i))}", outputs_cpu, targets_cpu, normalize=False, saveMontage=True)
+            utils.saveAsImage(f"{os.path.join(outputDir, str(i))}_target.png", targets_cpu[0])
+
         utils.saveAsImage(f"{os.path.join(outputDir, str(i))}_input.png", inputs_cpu[0])
-        utils.saveAsImage(f"{os.path.join(outputDir, str(i))}_target.png", targets_cpu[0])
         utils.saveAsImage(f"{os.path.join(outputDir, str(i))}_output.png", outputs_cpu[0])
 
 if __name__ == "__main__":
-    # get command line arguments
     if len(sys.argv) < 2:
         print(f"Usage: python {sys.argv[0]} <path/to/NPZs>")
         sys.exit(1)

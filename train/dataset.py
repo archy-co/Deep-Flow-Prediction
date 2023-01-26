@@ -10,6 +10,7 @@ from torch.utils.data import Dataset
 import numpy as np
 from os import listdir
 import random
+import torch
 
 # global switch, use fixed max values for dim-less airfoil data?
 fixedAirfoilNormalization = True
@@ -35,7 +36,7 @@ def find_absmax(data, use_targets, x):
 ######################################## DATA LOADER #########################################
 #         also normalizes data with max , and optionally makes it dimensionless              #
 
-def LoaderNormalizer(data, isTest = False, shuffle = 0, dataProp = None):
+def LoaderNormalizer(data, isTest = False, shuffle = 0, dataProp = None, inputsOnly = False):
     """
     # data: pass TurbDataset object with initialized dataDir / dataDirTest paths
     # train: when off, process as test data (first load regular for normalization if needed, then replace by test data)
@@ -55,20 +56,23 @@ def LoaderNormalizer(data, isTest = False, shuffle = 0, dataProp = None):
             files = files[0:min(10, len(files))]
         data.totalLength = len(files)
         data.inputs  = np.empty((len(files), 3, 128, 128))
-        data.targets = np.empty((len(files), 3, 128, 128))
+        if not inputsOnly:
+            data.targets = np.empty((len(files), 3, 128, 128))
 
         for i, file in enumerate(files):
             npfile = np.load(data.dataDir + file)
             d = npfile['a']
             data.inputs[i] = d[0:3]
-            data.targets[i] = d[3:6]
+            if not inputsOnly:
+                data.targets[i] = d[3:6]
         print("Number of data loaded:", len(data.inputs) )
 
     else:
         # load from folders reg, sup, and shear under the folder dataDir
         data.totalLength = int(dataProp[0])
         data.inputs  = np.empty((data.totalLength, 3, 128, 128))
-        data.targets = np.empty((data.totalLength, 3, 128, 128))
+        if not inputsOnly:
+            data.targets = np.empty((data.totalLength, 3, 128, 128))
 
         files1 = listdir(data.dataDir + "reg/")
         files1.sort()
@@ -87,31 +91,34 @@ def LoaderNormalizer(data, isTest = False, shuffle = 0, dataProp = None):
                 npfile = np.load(data.dataDir + "shear/" + files3[i-temp_2])
                 d = npfile['a']
                 data.inputs[i] = d[0:3]
-                data.targets[i] = d[3:6]
+                if not inputsOnly:
+                    data.targets[i] = d[3:6]
             elif i >= (dataProp[1])*dataProp[0]:
                 npfile = np.load(data.dataDir + "sup/" + files2[i-temp_1])
                 d = npfile['a']
                 data.inputs[i] = d[0:3]
-                data.targets[i] = d[3:6]
+                if not inputsOnly:
+                    data.targets[i] = d[3:6]
                 temp_2 = i + 1
             else:
                 npfile = np.load(data.dataDir + "reg/" + files1[i])
                 d = npfile['a']
                 data.inputs[i] = d[0:3]
-                data.targets[i] = d[3:6]
+                if not inputsOnly:
+                    data.targets[i] = d[3:6]
                 temp_1 = i + 1
                 temp_2 = i + 1
         print("Number of data loaded (reg, sup, shear):", temp_1, temp_2 - temp_1, i+1 - temp_2)
 
     ################################## NORMALIZATION OF TRAINING DATA ##########################################
 
-    if removePOffset:
+    if removePOffset and not inputsOnly:
         for i in range(data.totalLength):
             data.targets[i,0,:,:] -= np.mean(data.targets[i,0,:,:]) # remove offset
             data.targets[i,0,:,:] -= data.targets[i,0,:,:] * data.inputs[i,2,:,:]  # pressure * mask
 
     # make dimensionless based on current data set
-    if makeDimLess:
+    if makeDimLess and not inputsOnly:
         for i in range(data.totalLength):
             # only scale outputs, inputs are scaled by max only
             v_norm = ( np.max(np.abs(data.inputs[i,0,:,:]))**2 + np.max(np.abs(data.inputs[i,1,:,:]))**2 )**0.5 
@@ -152,9 +159,10 @@ def LoaderNormalizer(data, isTest = False, shuffle = 0, dataProp = None):
     data.inputs[:,0,:,:] *= (1.0/data.max_inputs_0)
     data.inputs[:,1,:,:] *= (1.0/data.max_inputs_1)
 
-    data.targets[:,0,:,:] *= (1.0/data.max_targets_0)
-    data.targets[:,1,:,:] *= (1.0/data.max_targets_1)
-    data.targets[:,2,:,:] *= (1.0/data.max_targets_2)
+    if not inputsOnly:
+        data.targets[:,0,:,:] *= (1.0/data.max_targets_0)
+        data.targets[:,1,:,:] *= (1.0/data.max_targets_1)
+        data.targets[:,2,:,:] *= (1.0/data.max_targets_2)
 
     ###################################### NORMALIZATION  OF TEST DATA #############################################
 
@@ -163,19 +171,21 @@ def LoaderNormalizer(data, isTest = False, shuffle = 0, dataProp = None):
         files.sort()
         data.totalLength = len(files)
         data.inputs  = np.empty((len(files), 3, 128, 128))
-        data.targets = np.empty((len(files), 3, 128, 128))
+        if not inputsOnly:
+            data.targets = np.empty((len(files), 3, 128, 128))
         for i, file in enumerate(files):
             npfile = np.load(data.dataDirTest + file)
             d = npfile['a']
             data.inputs[i] = d[0:3]
-            data.targets[i] = d[3:6]
+            if not inputsOnly:
+                data.targets[i] = d[3:6]
 
-        if removePOffset:
+        if removePOffset and not inputsOnly:
             for i in range(data.totalLength):
                 data.targets[i,0,:,:] -= np.mean(data.targets[i,0,:,:]) # remove offset
                 data.targets[i,0,:,:] -= data.targets[i,0,:,:] * data.inputs[i,2,:,:]  # pressure * mask
 
-        if makeDimLess:
+        if makeDimLess and not inputsOnly:
             for i in range(len(files)):
                 v_norm = ( np.max(np.abs(data.inputs[i,0,:,:]))**2 + np.max(np.abs(data.inputs[i,1,:,:]))**2 )**0.5 
                 data.targets[i,0,:,:] /= v_norm**2
@@ -185,13 +195,18 @@ def LoaderNormalizer(data, isTest = False, shuffle = 0, dataProp = None):
         data.inputs[:,0,:,:] *= (1.0/data.max_inputs_0)
         data.inputs[:,1,:,:] *= (1.0/data.max_inputs_1)
 
-        data.targets[:,0,:,:] *= (1.0/data.max_targets_0)
-        data.targets[:,1,:,:] *= (1.0/data.max_targets_1)
-        data.targets[:,2,:,:] *= (1.0/data.max_targets_2)
+        if not inputsOnly:
+            data.targets[:,0,:,:] *= (1.0/data.max_targets_0)
+            data.targets[:,1,:,:] *= (1.0/data.max_targets_1)
+            data.targets[:,2,:,:] *= (1.0/data.max_targets_2)
 
-    print("Data stats, input  mean %f, max  %f;   targets mean %f , max %f " % ( 
-      np.mean(np.abs(data.targets), keepdims=False), np.max(np.abs(data.targets), keepdims=False) , 
-      np.mean(np.abs(data.inputs), keepdims=False) , np.max(np.abs(data.inputs), keepdims=False) ) ) 
+    if not inputsOnly:
+        print("Data stats, input  mean %f, max  %f;   targets mean %f , max %f " % ( 
+        np.mean(np.abs(data.targets), keepdims=False), np.max(np.abs(data.targets), keepdims=False) , 
+        np.mean(np.abs(data.inputs), keepdims=False) , np.max(np.abs(data.inputs), keepdims=False) ) ) 
+    else:
+        print("Data stats, input  mean %f, max  %f" % (
+        np.mean(np.abs(data.inputs), keepdims=False) , np.max(np.abs(data.inputs), keepdims=False) ) ) 
 
     return data
 
@@ -203,7 +218,7 @@ class TurbDataset(Dataset):
     TRAIN = 0
     TEST  = 2
 
-    def __init__(self, dataProp=None, mode=TRAIN, dataDir="../data/train/", dataDirTest="../data/test/", shuffle=0, normMode=0):
+    def __init__(self, dataProp=None, mode=TRAIN, dataDir="../data/train/", dataDirTest="../data/test/", shuffle=0, normMode=0, inputsOnly=False):
         global makeDimLess, removePOffset
         """
         :param dataProp: for split&mix from multiple dirs, see LoaderNormalizer; None means off
@@ -227,8 +242,10 @@ class TurbDataset(Dataset):
         self.dataDir = dataDir
         self.dataDirTest = dataDirTest # only for mode==self.TEST
 
+        self.inputsOnly = inputsOnly
+
         # load & normalize data
-        self = LoaderNormalizer(self, isTest=(mode==self.TEST), dataProp=dataProp, shuffle=shuffle)
+        self = LoaderNormalizer(self, isTest=(mode==self.TEST), dataProp=dataProp, shuffle=shuffle, inputsOnly=inputsOnly)
 
         if not self.mode==self.TEST:
             # split for train/validation sets (80/20) , max 400
@@ -246,7 +263,10 @@ class TurbDataset(Dataset):
         return self.totalLength
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.targets[idx]
+        if not self.inputsOnly:
+            return self.inputs[idx], self.targets[idx]
+        else:
+            return self.inputs[idx], torch.FloatTensor(3, 128, 128)
 
     #  reverts normalization 
     def denormalize(self, data, v_norm):
